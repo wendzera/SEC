@@ -56,7 +56,8 @@ margin-top: 10px;
 <h2 align="center">Sistema de Login...</h2><br clear="all" /><br clear="all" />
 <div id="s4">
      <div class="form" id="first">
-          <form name= "form" method="POST" action="http://192.168.100.234/cripto/post/validarlogin.php" id="login_form">
+		//http://192.168.100.234/cripto/post/validarlogin.php
+          <form name= "form" method="POST" action="validarlogin_cripto.php" id="login_form">
                 <br clear="all" />
 				<div class="heading" style="width:183px;">Insira os dados e clique em entrar...</div>
 				<br clear="all" /><br clear="all" />

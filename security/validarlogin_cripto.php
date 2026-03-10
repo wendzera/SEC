@@ -7,7 +7,7 @@ $senha = $_POST['senha'];
 $usuario_cripto = cifrar( $usuario );
 $senha_cripto = cifrar( $senha );
 
-$url='http://192.168.100.234/cripto/post/comcripto/validarlogin.php';
+$url='http://192.168.100.234/cripto/post/aes/validarlogin.php';
 
 $ch = curl_init($url);
 
