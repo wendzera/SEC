@@ -1,36 +1,40 @@
 <?php
-define('CHARS', 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'); //characteres possiveis de serem utilizadas na msg....';
-define('CHAVE', 'ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba9876543210'); //substitui os valores correspondentes dos caracteres acima....';
+require_once __DIR__ . '/aes.php';
 
-/////funcao cifragem
-function cifrar($m)
+define('AES_KEY', '5131af7a19f7057b');
+define('AES_BLOCK_SIZE', 128);
+define('AES_MODE', 'CBC');
+
+/**
+ * Mantem o nome da funcao antiga para evitar mudar o restante do sistema,
+ * mas agora a cifra utilizada e AES.
+ *
+ * @param string $mensagem
+ * @return string
+ * @throws Exception
+ */
+function cifrar($mensagem)
 {
-//$m = strtoupper($m);
-$cifrada='';
-$qtde = strlen($m);
+    if ($mensagem === null || $mensagem === '') {
+        return '';
+    }
 
-      for ($i = 0; $i < $qtde; $i++) {
-          $c = substr($m,$i,1);
-          $posicao = strpos(CHARS,$c);
-          $cifrada=$cifrada.substr(CHAVE,$posicao,1);
-      }
-
-return $cifrada;
+    $aes = new AES($mensagem, AES_KEY, AES_BLOCK_SIZE, AES_MODE);
+    return $aes->encrypt();
 }
 
-/////funcao decifragem
-function decifrar($m)
+/**
+ * @param string $mensagem
+ * @return string
+ * @throws Exception
+ */
+function decifrar($mensagem)
 {
-//$m = strtoupper($m);
-$decifrada='';
-$qtde = strlen($m);
+    if ($mensagem === null || $mensagem === '') {
+        return '';
+    }
 
-      for ($i = 0; $i < $qtde; $i++) {
-          $c = substr($m,$i,1);
-          $posicao = strpos(CHAVE,$c);
-          $decifrada=$decifrada.substr(CHARS,$posicao,1);
-      }
-
-return $decifrada;
+    $aes = new AES($mensagem, AES_KEY, AES_BLOCK_SIZE, AES_MODE);
+    return $aes->decrypt();
 }
 ?>

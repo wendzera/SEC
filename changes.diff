@@ -1,0 +1,426 @@
+Only in /mnt/data/SEC_aes/security: AES.php
+diff -ru /mnt/data/SEC/security/aes.php /mnt/data/SEC_aes/security/aes.php
+--- /mnt/data/SEC/security/aes.php	2026-03-10 17:14:13.412391584 +0000
++++ /mnt/data/SEC_aes/security/aes.php	2026-03-10 17:20:18.974493106 +0000
+@@ -1,107 +1,159 @@
+ <?php
+ /**
+-Aes encryption
+-*/
+-class AES {
+-   
+-    protected $key;
+-    protected $data;
+-    protected $method;
+-    /**
+-     * Available OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING
+-     *
+-     * @var type $options
+-     */
++ * Helper simples para criptografia AES com OpenSSL.
++ *
++ * Esta versao mantem a mesma combinacao de algoritmo/IV usada no projeto
++ * original para preservar compatibilidade com o endpoint remoto ja esperado
++ * pelo fluxo de login.
++ */
++class AES
++{
++    protected $key = null;
++    protected $data = null;
++    protected $method = null;
+     protected $options = 0;
++    protected $iv = '1234567890123456';
++
+     /**
+-     * 
+-     * @param type $data
+-     * @param type $key
+-     * @param type $blockSize
+-     * @param type $mode
++     * @param string|null $data
++     * @param string|null $key
++     * @param int|null    $blockSize
++     * @param string      $mode
+      */
+-    function __construct($data = null, $key = null, $blockSize = null, $mode = 'CBC') {
++    public function __construct($data = null, $key = null, $blockSize = 128, $mode = 'CBC')
++    {
+         $this->setData($data);
+         $this->setKey($key);
+         $this->setMethode($blockSize, $mode);
+     }
++
+     /**
+-     * 
+-     * @param type $data
++     * @param string|null $data
+      */
+-    public function setData($data) {
++    public function setData($data)
++    {
+         $this->data = $data;
+     }
++
+     /**
+-     * 
+-     * @param type $key
++     * @param string|null $key
+      */
+-    public function setKey($key) {
++    public function setKey($key)
++    {
+         $this->key = $key;
+     }
++
+     /**
+-     * CBC 128 192 256 
+-      CBC-HMAC-SHA1 128 256
+-      CBC-HMAC-SHA256 128 256
+-      CFB 128 192 256
+-      CFB1 128 192 256
+-      CFB8 128 192 256
+-      CTR 128 192 256
+-      ECB 128 192 256
+-      OFB 128 192 256
+-      XTS 128 256
+-     * @param type $blockSize
+-     * @param type $mode
+-     */
+-    public function setMethode($blockSize, $mode = 'CBC') {
+-        if($blockSize==192 && in_array('', array('CBC-HMAC-SHA1','CBC-HMAC-SHA256','XTS'))){
+-            $this->method=null;
+-             throw new Exception('Invlid block size and mode combination!');
+-        }
+-        $this->method = 'AES-' . $blockSize . '-' . $mode;
+-    }
+-    /**
+-     * 
+-     * @return boolean
+-     */
+-    public function validateParams() {
+-        if ($this->data != null &&
+-                $this->method != null ) {
+-            return true;
+-        } else {
+-            return FALSE;
+-        }
+-    }
+-//it must be the same when you encrypt and decrypt
+-     protected function getIV() {
+-        return '1234567890123456';
+-         //return mcrypt_create_iv(mcrypt_get_iv_size($this->cipher, $this->mode), MCRYPT_RAND);
+-         return openssl_random_pseudo_bytes(openssl_cipher_iv_length($this->method));
+-     }
++     * Alias mantido por compatibilidade com o codigo antigo.
++     *
++     * Modos suportados pelo OpenSSL para AES:
++     * CBC, CFB, CTR, ECB, OFB, XTS, entre outros.
++     *
++     * @param int    $blockSize
++     * @param string $mode
++     *
++     * @throws Exception
++     */
++    public function setMethode($blockSize, $mode = 'CBC')
++    {
++        $this->setMethod($blockSize, $mode);
++    }
++
+     /**
+-     * @return type
++     * @param int    $blockSize
++     * @param string $mode
++     *
+      * @throws Exception
+      */
+-    public function encrypt() {
+-        if ($this->validateParams()) { 
+-            return trim(openssl_encrypt($this->data, $this->method, $this->key, $this->options,$this->getIV()));
+-        } else {
+-            throw new Exception('Invlid params!');
++    public function setMethod($blockSize, $mode = 'CBC')
++    {
++        $mode = strtoupper($mode);
++
++        if ($blockSize == 192 && in_array($mode, array('CBC-HMAC-SHA1', 'CBC-HMAC-SHA256', 'XTS'), true)) {
++            $this->method = null;
++            throw new Exception('Combinacao invalida entre block size e modo.');
++        }
++
++        $method = 'AES-' . $blockSize . '-' . $mode;
++
++        if (!in_array(strtolower($method), openssl_get_cipher_methods(), true)) {
++            $this->method = null;
++            throw new Exception('Metodo OpenSSL nao suportado: ' . $method);
+         }
++
++        $this->method = $method;
++    }
++
++    /**
++     * @return bool
++     */
++    public function validateParams()
++    {
++        return $this->data !== null && $this->key !== null && $this->method !== null;
+     }
++
+     /**
+-     * 
+-     * @return type
++     * O IV precisa ser identico entre cifragem e decifragem.
++     * Esta implementacao mantem o IV fixo do projeto original.
++     *
++     * @return string
++     */
++    protected function getIV()
++    {
++        $ivLength = openssl_cipher_iv_length($this->method);
++        return substr($this->iv, 0, $ivLength);
++    }
++
++    /**
++     * @return string
++     *
+      * @throws Exception
+      */
+-    public function decrypt() {
+-        if ($this->validateParams()) {
+-           $ret=openssl_decrypt($this->data, $this->method, $this->key, $this->options,$this->getIV());
+-          
+-           return   trim($ret); 
+-        } else {
+-            throw new Exception('Invlid params!');
++    public function encrypt()
++    {
++        if (!$this->validateParams()) {
++            throw new Exception('Parametros invalidos para criptografia.');
++        }
++
++        $encrypted = openssl_encrypt(
++            $this->data,
++            $this->method,
++            $this->key,
++            $this->options,
++            $this->getIV()
++        );
++
++        if ($encrypted === false) {
++            throw new Exception('Falha ao criptografar com OpenSSL.');
++        }
++
++        return trim($encrypted);
++    }
++
++    /**
++     * @return string
++     *
++     * @throws Exception
++     */
++    public function decrypt()
++    {
++        if (!$this->validateParams()) {
++            throw new Exception('Parametros invalidos para descriptografia.');
++        }
++
++        $decrypted = openssl_decrypt(
++            $this->data,
++            $this->method,
++            $this->key,
++            $this->options,
++            $this->getIV()
++        );
++
++        if ($decrypted === false) {
++            throw new Exception('Falha ao descriptografar com OpenSSL.');
+         }
++
++        return trim($decrypted);
+     }
+ }
+-?>
+\ No newline at end of file
++?>
+diff -ru /mnt/data/SEC/security/cifrar.php /mnt/data/SEC_aes/security/cifrar.php
+--- /mnt/data/SEC/security/cifrar.php	2026-03-10 17:14:22.928928908 +0000
++++ /mnt/data/SEC_aes/security/cifrar.php	2026-03-10 17:21:49.763259625 +0000
+@@ -1,10 +1,8 @@
+ <?php
+-include 'AES.php';
+-$inputText = "Teste";
+-$inputKey = "5131af7a19f7057b";
+-$blockSize = 128;
+-$aes = new AES($inputText, $inputKey, $blockSize);
+-$enc = $aes->encrypt();
+-echo "Apos criptografia.: ".$enc."<br/>";
++require_once __DIR__ . '/criptografia.php';
+ 
+-?>
+\ No newline at end of file
++$inputText = 'Teste';
++$enc = cifrar($inputText);
++
++echo 'Apos criptografia.: ' . $enc . '<br/>';
++?>
+diff -ru /mnt/data/SEC/security/criptografia.php /mnt/data/SEC_aes/security/criptografia.php
+--- /mnt/data/SEC/security/criptografia.php	2026-03-10 17:14:28.201834345 +0000
++++ /mnt/data/SEC_aes/security/criptografia.php	2026-03-10 17:20:34.638198453 +0000
+@@ -1,36 +1,40 @@
+ <?php
+-define('CHARS', 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'); //characteres possiveis de serem utilizadas na msg....';
+-define('CHAVE', 'ZYXWVUTSRQPONMLKJIHGFEDCBAzyxwvutsrqponmlkjihgfedcba9876543210'); //substitui os valores correspondentes dos caracteres acima....';
++require_once __DIR__ . '/aes.php';
+ 
+-/////funcao cifragem
+-function cifrar($m)
++define('AES_KEY', '5131af7a19f7057b');
++define('AES_BLOCK_SIZE', 128);
++define('AES_MODE', 'CBC');
++
++/**
++ * Mantem o nome da funcao antiga para evitar mudar o restante do sistema,
++ * mas agora a cifra utilizada e AES.
++ *
++ * @param string $mensagem
++ * @return string
++ * @throws Exception
++ */
++function cifrar($mensagem)
+ {
+-//$m = strtoupper($m);
+-$cifrada='';
+-$qtde = strlen($m);
++    if ($mensagem === null || $mensagem === '') {
++        return '';
++    }
+ 
+-      for ($i = 0; $i < $qtde; $i++) {
+-          $c = substr($m,$i,1);
+-          $posicao = strpos(CHARS,$c);
+-          $cifrada=$cifrada.substr(CHAVE,$posicao,1);
+-      }
+-
+-return $cifrada;
++    $aes = new AES($mensagem, AES_KEY, AES_BLOCK_SIZE, AES_MODE);
++    return $aes->encrypt();
+ }
+ 
+-/////funcao decifragem
+-function decifrar($m)
++/**
++ * @param string $mensagem
++ * @return string
++ * @throws Exception
++ */
++function decifrar($mensagem)
+ {
+-//$m = strtoupper($m);
+-$decifrada='';
+-$qtde = strlen($m);
+-
+-      for ($i = 0; $i < $qtde; $i++) {
+-          $c = substr($m,$i,1);
+-          $posicao = strpos(CHAVE,$c);
+-          $decifrada=$decifrada.substr(CHARS,$posicao,1);
+-      }
++    if ($mensagem === null || $mensagem === '') {
++        return '';
++    }
+ 
+-return $decifrada;
++    $aes = new AES($mensagem, AES_KEY, AES_BLOCK_SIZE, AES_MODE);
++    return $aes->decrypt();
+ }
+ ?>
+diff -ru /mnt/data/SEC/security/decifrar.php /mnt/data/SEC_aes/security/decifrar.php
+--- /mnt/data/SEC/security/decifrar.php	2026-03-10 17:14:35.287778390 +0000
++++ /mnt/data/SEC_aes/security/decifrar.php	2026-03-10 17:21:49.783519551 +0000
+@@ -1,11 +1,8 @@
+ <?php
+-include 'AES.php';
+-$inputText = "1OUdhPUr6mIcA8XPvcLQ/g==";
+-$inputKey = "5131af7a19f7057b";
+-$blockSize = 128;
+-$aes = new AES($inputText, $inputKey, $blockSize);
+-$dec=$aes->decrypt();
+-echo "Apos da decifragem.: ".$dec."<br/>";
++require_once __DIR__ . '/criptografia.php';
+ 
++$inputText = '1OUdhPUr6mIcA8XPvcLQ/g==';
++$dec = decifrar($inputText);
+ 
+-?>
+\ No newline at end of file
++echo 'Apos da decifragem.: ' . $dec . '<br/>';
++?>
+diff -ru /mnt/data/SEC/security/validarlogin_cripto.php /mnt/data/SEC_aes/security/validarlogin_cripto.php
+--- /mnt/data/SEC/security/validarlogin_cripto.php	2026-03-10 17:15:19.803143831 +0000
++++ /mnt/data/SEC_aes/security/validarlogin_cripto.php	2026-03-10 17:21:36.725114738 +0000
+@@ -1,25 +1,52 @@
+ <?php
+-include( 'criptografia.php' );
++require_once __DIR__ . '/criptografia.php';
+ 
+-$usuario = $_POST['usuario'];
+-$senha = $_POST['senha'];
++$usuario = isset($_POST['usuario']) ? trim($_POST['usuario']) : '';
++$senha = isset($_POST['senha']) ? trim($_POST['senha']) : '';
+ 
+-$usuario_cripto = cifrar( $usuario );
+-$senha_cripto = cifrar( $senha );
+-
+-$url='http://192.168.100.234/cripto/post/aes/validarlogin.php';
++if ($usuario === '' || $senha === '') {
++    exit('Informe usuario e senha.');
++}
++
++try {
++    $usuario_cripto = cifrar($usuario);
++    $senha_cripto = cifrar($senha);
++} catch (Exception $e) {
++    http_response_code(500);
++    exit('Erro ao criptografar os dados de login: ' . $e->getMessage());
++}
++
++$url = 'http://192.168.100.234/cripto/post/aes/validarlogin.php';
++
++$params = http_build_query(
++    array(
++        'usuario' => $usuario_cripto,
++        'senha' => $senha_cripto,
++    ),
++    '',
++    '&'
++);
+ 
+ $ch = curl_init($url);
+ 
+-$params="usuario=$usuario_cripto&senha=$senha_cripto";
+-
+-curl_setopt($ch, CURLOPT_POST, 1);
+-curl_setopt($ch, CURLOPT_POSTFIELDS, $params);
+-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
++curl_setopt_array($ch, array(
++    CURLOPT_POST => true,
++    CURLOPT_POSTFIELDS => $params,
++    CURLOPT_RETURNTRANSFER => true,
++    CURLOPT_HTTPHEADER => array('Content-Type: application/x-www-form-urlencoded'),
++    CURLOPT_TIMEOUT => 10,
++));
+ 
+ $result = curl_exec($ch);
+ 
+-print_r($result);
++if ($result === false) {
++    http_response_code(502);
++    echo 'Erro ao enviar a requisicao: ' . curl_error($ch);
++    curl_close($ch);
++    exit;
++}
+ 
+ curl_close($ch);
+-?>
+\ No newline at end of file
++
++echo $result;
++?>

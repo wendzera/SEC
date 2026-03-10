@@ -1,107 +1,159 @@
 <?php
 /**
-Aes encryption
-*/
-class AES {
-   
-    protected $key;
-    protected $data;
-    protected $method;
-    /**
-     * Available OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING
-     *
-     * @var type $options
-     */
+ * Helper simples para criptografia AES com OpenSSL.
+ *
+ * Esta versao mantem a mesma combinacao de algoritmo/IV usada no projeto
+ * original para preservar compatibilidade com o endpoint remoto ja esperado
+ * pelo fluxo de login.
+ */
+class AES
+{
+    protected $key = null;
+    protected $data = null;
+    protected $method = null;
     protected $options = 0;
+    protected $iv = '1234567890123456';
+
     /**
-     * 
-     * @param type $data
-     * @param type $key
-     * @param type $blockSize
-     * @param type $mode
+     * @param string|null $data
+     * @param string|null $key
+     * @param int|null    $blockSize
+     * @param string      $mode
      */
-    function __construct($data = null, $key = null, $blockSize = null, $mode = 'CBC') {
+    public function __construct($data = null, $key = null, $blockSize = 128, $mode = 'CBC')
+    {
         $this->setData($data);
         $this->setKey($key);
         $this->setMethode($blockSize, $mode);
     }
+
     /**
-     * 
-     * @param type $data
+     * @param string|null $data
      */
-    public function setData($data) {
+    public function setData($data)
+    {
         $this->data = $data;
     }
+
     /**
-     * 
-     * @param type $key
+     * @param string|null $key
      */
-    public function setKey($key) {
+    public function setKey($key)
+    {
         $this->key = $key;
     }
+
     /**
-     * CBC 128 192 256 
-      CBC-HMAC-SHA1 128 256
-      CBC-HMAC-SHA256 128 256
-      CFB 128 192 256
-      CFB1 128 192 256
-      CFB8 128 192 256
-      CTR 128 192 256
-      ECB 128 192 256
-      OFB 128 192 256
-      XTS 128 256
-     * @param type $blockSize
-     * @param type $mode
-     */
-    public function setMethode($blockSize, $mode = 'CBC') {
-        if($blockSize==192 && in_array('', array('CBC-HMAC-SHA1','CBC-HMAC-SHA256','XTS'))){
-            $this->method=null;
-             throw new Exception('Invlid block size and mode combination!');
-        }
-        $this->method = 'AES-' . $blockSize . '-' . $mode;
-    }
-    /**
-     * 
-     * @return boolean
-     */
-    public function validateParams() {
-        if ($this->data != null &&
-                $this->method != null ) {
-            return true;
-        } else {
-            return FALSE;
-        }
-    }
-//it must be the same when you encrypt and decrypt
-     protected function getIV() {
-        return '1234567890123456';
-         //return mcrypt_create_iv(mcrypt_get_iv_size($this->cipher, $this->mode), MCRYPT_RAND);
-         return openssl_random_pseudo_bytes(openssl_cipher_iv_length($this->method));
-     }
-    /**
-     * @return type
+     * Alias mantido por compatibilidade com o codigo antigo.
+     *
+     * Modos suportados pelo OpenSSL para AES:
+     * CBC, CFB, CTR, ECB, OFB, XTS, entre outros.
+     *
+     * @param int    $blockSize
+     * @param string $mode
+     *
      * @throws Exception
      */
-    public function encrypt() {
-        if ($this->validateParams()) { 
-            return trim(openssl_encrypt($this->data, $this->method, $this->key, $this->options,$this->getIV()));
-        } else {
-            throw new Exception('Invlid params!');
-        }
+    public function setMethode($blockSize, $mode = 'CBC')
+    {
+        $this->setMethod($blockSize, $mode);
     }
+
     /**
-     * 
-     * @return type
+     * @param int    $blockSize
+     * @param string $mode
+     *
      * @throws Exception
      */
-    public function decrypt() {
-        if ($this->validateParams()) {
-           $ret=openssl_decrypt($this->data, $this->method, $this->key, $this->options,$this->getIV());
-          
-           return   trim($ret); 
-        } else {
-            throw new Exception('Invlid params!');
+    public function setMethod($blockSize, $mode = 'CBC')
+    {
+        $mode = strtoupper($mode);
+
+        if ($blockSize == 192 && in_array($mode, array('CBC-HMAC-SHA1', 'CBC-HMAC-SHA256', 'XTS'), true)) {
+            $this->method = null;
+            throw new Exception('Combinacao invalida entre block size e modo.');
         }
+
+        $method = 'AES-' . $blockSize . '-' . $mode;
+
+        if (!in_array(strtolower($method), openssl_get_cipher_methods(), true)) {
+            $this->method = null;
+            throw new Exception('Metodo OpenSSL nao suportado: ' . $method);
+        }
+
+        $this->method = $method;
+    }
+
+    /**
+     * @return bool
+     */
+    public function validateParams()
+    {
+        return $this->data !== null && $this->key !== null && $this->method !== null;
+    }
+
+    /**
+     * O IV precisa ser identico entre cifragem e decifragem.
+     * Esta implementacao mantem o IV fixo do projeto original.
+     *
+     * @return string
+     */
+    protected function getIV()
+    {
+        $ivLength = openssl_cipher_iv_length($this->method);
+        return substr($this->iv, 0, $ivLength);
+    }
+
+    /**
+     * @return string
+     *
+     * @throws Exception
+     */
+    public function encrypt()
+    {
+        if (!$this->validateParams()) {
+            throw new Exception('Parametros invalidos para criptografia.');
+        }
+
+        $encrypted = openssl_encrypt(
+            $this->data,
+            $this->method,
+            $this->key,
+            $this->options,
+            $this->getIV()
+        );
+
+        if ($encrypted === false) {
+            throw new Exception('Falha ao criptografar com OpenSSL.');
+        }
+
+        return trim($encrypted);
+    }
+
+    /**
+     * @return string
+     *
+     * @throws Exception
+     */
+    public function decrypt()
+    {
+        if (!$this->validateParams()) {
+            throw new Exception('Parametros invalidos para descriptografia.');
+        }
+
+        $decrypted = openssl_decrypt(
+            $this->data,
+            $this->method,
+            $this->key,
+            $this->options,
+            $this->getIV()
+        );
+
+        if ($decrypted === false) {
+            throw new Exception('Falha ao descriptografar com OpenSSL.');
+        }
+
+        return trim($decrypted);
     }
 }
 ?>
